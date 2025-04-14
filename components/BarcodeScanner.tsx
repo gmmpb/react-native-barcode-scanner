@@ -16,6 +16,9 @@ import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
+// Get status bar height for proper layout adjustment
+const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0;
+
 export function BarcodeScanner({
   onScan,
   enabled = true,
@@ -199,7 +202,16 @@ export function BarcodeScanner({
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      <StatusBar 
+        barStyle="light-content" 
+        backgroundColor="#000000" 
+        translucent={Platform.OS === 'android'} 
+      />
+      
+      {/* Add padding for Android status bar in scanner */}
+      {Platform.OS === 'android' && (
+        <View style={{ height: STATUS_BAR_HEIGHT, backgroundColor: '#000000' }} />
+      )}
 
       <CameraView
         style={styles.camera}
@@ -256,18 +268,6 @@ export function BarcodeScanner({
               <View
                 style={[styles.cornerTR, { borderColor: colors.primary }]}
               />
-              <View
-                style={[styles.cornerBL, { borderColor: colors.primary }]}
-              />
-              <View
-                style={[styles.cornerBR, { borderColor: colors.primary }]}
-              />
-
-              {/* Scan line */}
-              {!scanned && (
-                <Animated.View
-                  style={[
-                    styles.scanLine,
                     {
                       backgroundColor: colors.primary,
                       transform: [{ translateY: scanLineTranslate }],

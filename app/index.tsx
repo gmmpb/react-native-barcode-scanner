@@ -21,7 +21,8 @@ import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
 // Get status bar height for proper layout adjustment
-const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0;
+const STATUS_BAR_HEIGHT =
+  Platform.OS === "android" ? StatusBar.currentHeight || 24 : 0;
 
 export default function BarcodeScannerScreen() {
   const [scannedData, setScannedData] = useState<{
@@ -119,25 +120,27 @@ export default function BarcodeScannerScreen() {
       <StatusBar
         barStyle={colorScheme === "dark" ? "light-content" : "dark-content"}
         backgroundColor={colors.background}
-        translucent={Platform.OS === 'android'}
+        translucent={Platform.OS === "android"}
       />
-      
+
       {/* Add a spacer view to account for translucent status bar on Android */}
-      {Platform.OS === 'android' && (
-        <View style={{ height: STATUS_BAR_HEIGHT, backgroundColor: colors.background }} />
+      {Platform.OS === "android" && (
+        <View
+          style={{
+            height: STATUS_BAR_HEIGHT,
+            backgroundColor: colors.background,
+          }}
+        />
       )}
-      
+
       <SafeAreaView
         style={[styles.safeArea, { backgroundColor: colors.background }]}
       >
         {/* Main Container */}
         <ThemedView style={styles.container}>
           {/* Header with app title and scan button */}
-          <ThemedView 
-            style={[
-              styles.header, 
-              { borderBottomColor: colors.border }
-            ]}
+          <ThemedView
+            style={[styles.header, { borderBottomColor: colors.border }]}
           >
             <View style={styles.headerLeft}>
               <ThemedText style={styles.headerTitle}>Barcode Reader</ThemedText>
@@ -145,15 +148,15 @@ export default function BarcodeScannerScreen() {
                 Scan and manage barcodes
               </ThemedText>
             </View>
-            
+
             <TouchableOpacity
               style={[
                 styles.scanButton,
-                { 
-                  backgroundColor: cameraEnabled 
-                    ? colors.error 
-                    : colors.primary
-                }
+                {
+                  backgroundColor: cameraEnabled
+                    ? colors.error
+                    : colors.primary,
+                },
               ]}
               onPress={toggleCamera}
             >
@@ -167,7 +170,7 @@ export default function BarcodeScannerScreen() {
               </ThemedText>
             </TouchableOpacity>
           </ThemedView>
-          
+
           {/* Main content area */}
           <ThemedView style={styles.content}>
             {/* Current scan result section */}
@@ -181,7 +184,9 @@ export default function BarcodeScannerScreen() {
               ]}
             >
               <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionTitle}>Current Scan</ThemedText>
+                <ThemedText style={styles.sectionTitle}>
+                  Current Scan
+                </ThemedText>
 
                 {scannedData && (
                   <TouchableOpacity
@@ -297,7 +302,9 @@ export default function BarcodeScannerScreen() {
               ]}
             >
               <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionTitle}>Scan History</ThemedText>
+                <ThemedText style={styles.sectionTitle}>
+                  Scan History
+                </ThemedText>
               </View>
 
               {scanHistory.length > 0 ? (
@@ -377,22 +384,19 @@ export default function BarcodeScannerScreen() {
                   enabled={cameraEnabled}
                 />
               </View>
-              
+
               <TouchableOpacity
                 style={[
                   styles.closeScannerButton,
-                  { 
+                  {
                     backgroundColor: colors.error,
-                    top: Platform.OS === 'android' ? STATUS_BAR_HEIGHT + 20 : 50
-                  }
+                    top:
+                      Platform.OS === "android" ? STATUS_BAR_HEIGHT + 20 : 50,
+                  },
                 ]}
                 onPress={toggleCamera}
               >
-                <IconSymbol
-                  name="xmark"
-                  size={20}
-                  color={colors.buttonText}
-                />
+                <IconSymbol name="xmark" size={20} color={colors.buttonText} />
               </TouchableOpacity>
             </View>
           </Modal>
