@@ -12,6 +12,8 @@ import {
   Platform,
   Pressable,
   Alert,
+  TextInput,
+  Modal,
 } from "react-native";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { ThemedText } from "@/components/ThemedText";
@@ -29,17 +31,26 @@ export default function BarcodeScannerScreen() {
     data: string;
     type: string;
     timestamp: Date;
+    price?: string;
   } | null>(null);
   const [scanHistory, setScanHistory] = useState<
     {
       data: string;
       type: string;
       timestamp: Date;
+      price?: string;
     }[]
   >([]);
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [flashOn, setFlashOn] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [addBarcodeMode, setAddBarcodeMode] = useState(false);
+  const [priceModalVisible, setPriceModalVisible] = useState(false);
+  const [tempBarcode, setTempBarcode] = useState<{
+    data: string;
+    type: string;
+  } | null>(null);
+  const [price, setPrice] = useState("");
 
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
@@ -56,6 +67,14 @@ export default function BarcodeScannerScreen() {
   }, []);
 
   const handleBarCodeScanned = (data: string, type: string) => {
+    // If in add barcode mode, prompt for price
+    if (addBarcodeMode) {
+      setTempBarcode({ data, type });
+      setPriceModalVisible(true);
+      return;
+    }
+
+    // Regular scan mode
     const newScan = {
       data,
       type,
@@ -66,8 +85,36 @@ export default function BarcodeScannerScreen() {
     setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]); // Keep last 10 scans
   };
 
+  const handleAddBarcodeWithPrice = () => {
+    if (!tempBarcode) return;
+
+    const newScan = {
+      data: tempBarcode.data,
+      type: tempBarcode.type,
+      timestamp: new Date(),
+      price: price.trim(),
+    };
+
+    setScannedData(newScan);
+    setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]); // Keep last 10 scans
+
+    // Reset temporary states
+    setTempBarcode(null);
+    setPrice("");
+    setPriceModalVisible(false);
+  };
+
   const toggleCamera = () => {
     setCameraEnabled(!cameraEnabled);
+
+    // Reset add barcode mode when camera is turned off
+    if (cameraEnabled) {
+      setAddBarcodeMode(false);
+    }
+  };
+
+  const toggleAddBarcodeMode = () => {
+    setAddBarcodeMode(!addBarcodeMode);
   };
 
   const toggleFlash = () => {
@@ -157,22 +204,46 @@ export default function BarcodeScannerScreen() {
 
             <View style={styles.headerActions}>
               {cameraEnabled && (
-                <TouchableOpacity
-                  style={[
-                    styles.iconButton,
-                    {
-                      backgroundColor: flashOn ? colors.accent : colors.surface,
-                      marginRight: 8,
-                    },
-                  ]}
-                  onPress={toggleFlash}
-                >
-                  <IconSymbol
-                    name={flashOn ? "bolt.fill" : "bolt.slash"}
-                    size={20}
-                    color={flashOn ? colors.buttonText : colors.icon}
-                  />
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[
+                      styles.iconButton,
+                      {
+                        backgroundColor: flashOn
+                          ? colors.accent
+                          : colors.surface,
+                        marginRight: 8,
+                      },
+                    ]}
+                    onPress={toggleFlash}
+                  >
+                    <IconSymbol
+                      name={flashOn ? "bolt.fill" : "bolt.slash"}
+                      size={20}
+                      color={flashOn ? colors.buttonText : colors.icon}
+                    />
+                  </TouchableOpacity>
+
+                  {/* Add Barcode Mode Toggle Button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.iconButton,
+                      {
+                        backgroundColor: addBarcodeMode
+                          ? colors.secondary
+                          : colors.surface,
+                        marginRight: 8,
+                      },
+                    ]}
+                    onPress={toggleAddBarcodeMode}
+                  >
+                    <IconSymbol
+                      name="barcode"
+                      size={20}
+                      color={addBarcodeMode ? colors.buttonText : colors.icon}
+                    />
+                  </TouchableOpacity>
+                </>
               )}
 
               <TouchableOpacity
@@ -211,6 +282,13 @@ export default function BarcodeScannerScreen() {
                   },
                 ]}
               >
+                {addBarcodeMode && (
+                  <View style={styles.addBarcodeOverlay}>
+                    <ThemedText style={styles.addBarcodeText}>
+                      Scan to add barcode with price
+                    </ThemedText>
+                  </View>
+                )}
                 <BarcodeScanner
                   onScan={handleBarCodeScanned}
                   enabled={cameraEnabled}
@@ -252,24 +330,39 @@ export default function BarcodeScannerScreen() {
               {scannedData ? (
                 <View style={styles.scanDataContainer}>
                   <View style={styles.scanMetaRow}>
-                    <View
-                      style={[
-                        styles.scanTypeChip,
-                        { backgroundColor: colors.primary },
-                      ]}
-                    >
-                      <IconSymbol
-                        name={
-                          scannedData.type.toLowerCase().includes("qr")
-                            ? "qrcode"
-                            : "barcode"
-                        }
-                        size={14}
-                        color={colors.buttonText}
-                      />
-                      <ThemedText style={styles.scanTypeText}>
-                        {scannedData.type.toUpperCase()}
-                      </ThemedText>
+                    <View style={styles.scanMetaLeft}>
+                      <View
+                        style={[
+                          styles.scanTypeChip,
+                          { backgroundColor: colors.primary },
+                        ]}
+                      >
+                        <IconSymbol
+                          name={
+                            scannedData.type.toLowerCase().includes("qr")
+                              ? "qrcode"
+                              : "barcode"
+                          }
+                          size={14}
+                          color={colors.buttonText}
+                        />
+                        <ThemedText style={styles.scanTypeText}>
+                          {scannedData.type.toUpperCase()}
+                        </ThemedText>
+                      </View>
+
+                      {scannedData.price && (
+                        <View
+                          style={[
+                            styles.priceChip,
+                            { backgroundColor: colors.secondary },
+                          ]}
+                        >
+                          <ThemedText style={styles.priceText}>
+                            ${scannedData.price}
+                          </ThemedText>
+                        </View>
+                      )}
                     </View>
 
                     <ThemedText style={styles.timeText}>
@@ -405,10 +498,22 @@ export default function BarcodeScannerScreen() {
                           >
                             {item.data}
                           </ThemedText>
-                          <ThemedText style={styles.historyItemMeta}>
-                            {item.type.toUpperCase()} •{" "}
-                            {formatTime(item.timestamp)}
-                          </ThemedText>
+                          <View style={styles.historyItemMeta}>
+                            <ThemedText style={styles.historyItemMetaText}>
+                              {item.type.toUpperCase()} •{" "}
+                              {formatTime(item.timestamp)}
+                            </ThemedText>
+                            {item.price && (
+                              <ThemedText
+                                style={[
+                                  styles.historyItemPrice,
+                                  { color: colors.secondary },
+                                ]}
+                              >
+                                ${item.price}
+                              </ThemedText>
+                            )}
+                          </View>
                         </View>
                       </View>
 
@@ -432,6 +537,96 @@ export default function BarcodeScannerScreen() {
           </ThemedView>
         </ThemedView>
       </SafeAreaView>
+
+      {/* Price Input Modal */}
+      <Modal
+        visible={priceModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setPriceModalVisible(false);
+          setTempBarcode(null);
+          setPrice("");
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Add Price</ThemedText>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: colors.background },
+                ]}
+                onPress={() => {
+                  setPriceModalVisible(false);
+                  setTempBarcode(null);
+                  setPrice("");
+                }}
+              >
+                <IconSymbol name="xmark" size={16} color={colors.icon} />
+              </TouchableOpacity>
+            </View>
+
+            <ThemedText style={styles.modalText}>
+              Enter price for barcode:
+            </ThemedText>
+
+            <ThemedText
+              style={styles.barcodeText}
+              numberOfLines={1}
+              ellipsizeMode="middle"
+            >
+              {tempBarcode?.data}
+            </ThemedText>
+
+            <View
+              style={[
+                styles.priceInputContainer,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <ThemedText style={styles.priceCurrency}>$</ThemedText>
+              <TextInput
+                style={[styles.priceInput, { color: colors.text }]}
+                placeholder="0.00"
+                placeholderTextColor={`${colors.text}50`}
+                keyboardType="decimal-pad"
+                value={price}
+                onChangeText={setPrice}
+                autoFocus
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  { backgroundColor: colors.secondary },
+                ]}
+                onPress={handleAddBarcodeWithPrice}
+              >
+                <IconSymbol
+                  name="checkmark.circle.fill"
+                  size={18}
+                  color={colors.buttonText}
+                />
+                <ThemedText style={styles.modalButtonText}>
+                  Add Barcode
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -501,6 +696,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
     height: 200,
+    position: "relative",
+  },
+  addBarcodeOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  addBarcodeText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
   currentScanContainer: {
     borderRadius: 12,
@@ -531,6 +742,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
+  scanMetaLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   scanTypeChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -543,6 +758,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
     marginLeft: 4,
+  },
+  priceChip: {
+    marginLeft: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  priceText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   timeText: {
     fontSize: 12,
@@ -634,8 +860,18 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   historyItemMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  historyItemMetaText: {
     fontSize: 11,
     opacity: 0.6,
+  },
+  historyItemPrice: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginLeft: 8,
   },
   emptyHistoryContainer: {
     padding: 32,
@@ -646,5 +882,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
     textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: width * 0.8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  modalText: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  barcodeText: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 16,
+  },
+  priceInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  priceCurrency: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginRight: 4,
+  },
+  priceInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  modalButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  modalButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    marginLeft: 8,
   },
 });
