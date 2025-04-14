@@ -14,6 +14,7 @@ import {
   Alert,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from "react-native";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { ThemedText } from "@/components/ThemedText";
@@ -21,6 +22,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { addBarcode, getBarcode, BarcodeResponse } from "@/services/barcodeApi";
 
 // Get status bar height for proper layout adjustment
 const STATUS_BAR_HEIGHT =
@@ -32,6 +34,7 @@ export default function BarcodeScannerScreen() {
     type: string;
     timestamp: Date;
     price?: string;
+    exists?: boolean;
   } | null>(null);
   const [scanHistory, setScanHistory] = useState<
     {
@@ -39,6 +42,7 @@ export default function BarcodeScannerScreen() {
       type: string;
       timestamp: Date;
       price?: string;
+      exists?: boolean;
     }[]
   >([]);
   const [cameraEnabled, setCameraEnabled] = useState(true);
@@ -51,6 +55,8 @@ export default function BarcodeScannerScreen() {
     type: string;
   } | null>(null);
   const [price, setPrice] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
@@ -66,7 +72,14 @@ export default function BarcodeScannerScreen() {
     };
   }, []);
 
-  const handleBarCodeScanned = (data: string, type: string) => {
+  const displayErrorMessage = (message: string, duration: number = 2000) => {
+    setErrorMessage(message);
+    setTimeout(() => {
+      setErrorMessage(null);
+    }, duration);
+  };
+
+  const handleBarCodeScanned = async (data: string, type: string) => {
     // If in add barcode mode, prompt for price
     if (addBarcodeMode) {
       setTempBarcode({ data, type });
@@ -74,34 +87,95 @@ export default function BarcodeScannerScreen() {
       return;
     }
 
-    // Regular scan mode
-    const newScan = {
-      data,
-      type,
-      timestamp: new Date(),
-    };
+    // Regular scan mode - check if barcode exists in API
+    setIsLoading(true);
+    setErrorMessage(null);
 
-    setScannedData(newScan);
-    setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]); // Keep last 10 scans
+    try {
+      const barcodeData = await getBarcode(data);
+
+      if (!barcodeData.exists) {
+        displayErrorMessage("Barcode not found in the database.");
+        setScannedData(null);
+        return;
+      }
+
+      const newScan = {
+        data,
+        type,
+        timestamp: new Date(),
+        price: barcodeData.price?.toString(),
+        exists: barcodeData.exists,
+      };
+
+      setScannedData(newScan);
+      setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]); // Keep last 10 scans
+    } catch (error) {
+      console.error("Error fetching barcode data:", error);
+      displayErrorMessage(
+        "Failed to fetch barcode data. Check your connection."
+      );
+
+      // Still add scan to history, but without price
+      const newScan = {
+        data,
+        type,
+        timestamp: new Date(),
+      };
+
+      setScannedData(newScan);
+      setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleAddBarcodeWithPrice = () => {
-    if (!tempBarcode) return;
+  const handleAddBarcodeWithPrice = async () => {
+    if (!tempBarcode || !price.trim()) return;
 
-    const newScan = {
-      data: tempBarcode.data,
-      type: tempBarcode.type,
-      timestamp: new Date(),
-      price: price.trim(),
-    };
+    setIsLoading(true);
+    setErrorMessage(null);
 
-    setScannedData(newScan);
-    setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]); // Keep last 10 scans
+    try {
+      // Convert price string to number
+      const priceNumber = parseFloat(price.trim());
 
-    // Reset temporary states
-    setTempBarcode(null);
-    setPrice("");
-    setPriceModalVisible(false);
+      if (isNaN(priceNumber)) {
+        displayErrorMessage("Please enter a valid price.");
+        return;
+      }
+
+      // Call API to add barcode
+      const response = await addBarcode(tempBarcode.data, priceNumber);
+
+      // Create new scan with the response data
+      const newScan = {
+        data: tempBarcode.data,
+        type: tempBarcode.type,
+        timestamp: new Date(),
+        price: priceNumber.toString(),
+        exists: true,
+      };
+
+      setScannedData(newScan);
+      setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]); // Keep last 10 scans
+
+      // Show success message
+      Alert.alert(
+        "Success",
+        "Barcode added successfully with price: $" + priceNumber
+      );
+
+      // Reset temporary states
+      setTempBarcode(null);
+      setPrice("");
+      setPriceModalVisible(false);
+    } catch (error) {
+      console.error("Error adding barcode:", error);
+      displayErrorMessage("Failed to add barcode. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleCamera = () => {
@@ -238,7 +312,7 @@ export default function BarcodeScannerScreen() {
                     onPress={toggleAddBarcodeMode}
                   >
                     <IconSymbol
-                      name="barcode"
+                      name="photo.on.rectangle"
                       size={20}
                       color={addBarcodeMode ? colors.buttonText : colors.icon}
                     />
@@ -327,7 +401,14 @@ export default function BarcodeScannerScreen() {
                 )}
               </View>
 
-              {scannedData ? (
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <ThemedText style={styles.loadingText}>
+                    Loading barcode data...
+                  </ThemedText>
+                </View>
+              ) : scannedData ? (
                 <View style={styles.scanDataContainer}>
                   <View style={styles.scanMetaRow}>
                     <View style={styles.scanMetaLeft}>
@@ -341,7 +422,7 @@ export default function BarcodeScannerScreen() {
                           name={
                             scannedData.type.toLowerCase().includes("qr")
                               ? "qrcode"
-                              : "barcode"
+                              : "photo.on.rectangle"
                           }
                           size={14}
                           color={colors.buttonText}
@@ -351,7 +432,7 @@ export default function BarcodeScannerScreen() {
                         </ThemedText>
                       </View>
 
-                      {scannedData.price && (
+                      {scannedData.price ? (
                         <View
                           style={[
                             styles.priceChip,
@@ -362,7 +443,18 @@ export default function BarcodeScannerScreen() {
                             ${scannedData.price}
                           </ThemedText>
                         </View>
-                      )}
+                      ) : scannedData.exists === false ? (
+                        <View
+                          style={[
+                            styles.priceChip,
+                            { backgroundColor: colors.warning },
+                          ]}
+                        >
+                          <ThemedText style={styles.priceText}>
+                            Not found
+                          </ThemedText>
+                        </View>
+                      ) : null}
                     </View>
 
                     <ThemedText style={styles.timeText}>
@@ -403,12 +495,44 @@ export default function BarcodeScannerScreen() {
                           {copied ? "Copied!" : "Copy"}
                         </ThemedText>
                       </TouchableOpacity>
+
+                      {scannedData.exists === false && (
+                        <TouchableOpacity
+                          style={[
+                            styles.actionButton,
+                            {
+                              backgroundColor: colors.secondary,
+                              marginLeft: 8,
+                            },
+                          ]}
+                          onPress={() => {
+                            setTempBarcode({
+                              data: scannedData.data,
+                              type: scannedData.type,
+                            });
+                            setPriceModalVisible(true);
+                          }}
+                        >
+                          <IconSymbol
+                            name="photo.on.rectangle"
+                            size={16}
+                            color={colors.buttonText}
+                          />
+                          <ThemedText style={styles.actionButtonText}>
+                            Add Price
+                          </ThemedText>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </ThemedView>
                 </View>
               ) : (
                 <View style={styles.emptyStateContainer}>
-                  <IconSymbol name="barcode" size={32} color={colors.icon} />
+                  <IconSymbol
+                    name="photo.on.rectangle"
+                    size={32}
+                    color={colors.icon}
+                  />
                   <ThemedText style={styles.emptyStateText}>
                     No barcode scanned yet
                   </ThemedText>
@@ -430,6 +554,26 @@ export default function BarcodeScannerScreen() {
                       </ThemedText>
                     </TouchableOpacity>
                   )}
+                </View>
+              )}
+
+              {errorMessage && (
+                <View
+                  style={[
+                    styles.errorContainer,
+                    { backgroundColor: `${colors.error}20` },
+                  ]}
+                >
+                  <IconSymbol
+                    name="exclamationmark.triangle.fill"
+                    size={16}
+                    color={colors.error}
+                  />
+                  <ThemedText
+                    style={[styles.errorText, { color: colors.error }]}
+                  >
+                    {errorMessage}
+                  </ThemedText>
                 </View>
               )}
             </ThemedView>
@@ -485,7 +629,7 @@ export default function BarcodeScannerScreen() {
                           name={
                             item.type.toLowerCase().includes("qr")
                               ? "qrcode"
-                              : "barcode"
+                              : "photo.on.rectangle"
                           }
                           size={20}
                           color={colors.icon}
@@ -503,7 +647,7 @@ export default function BarcodeScannerScreen() {
                               {item.type.toUpperCase()} •{" "}
                               {formatTime(item.timestamp)}
                             </ThemedText>
-                            {item.price && (
+                            {item.price ? (
                               <ThemedText
                                 style={[
                                   styles.historyItemPrice,
@@ -512,7 +656,16 @@ export default function BarcodeScannerScreen() {
                               >
                                 ${item.price}
                               </ThemedText>
-                            )}
+                            ) : item.exists === false ? (
+                              <ThemedText
+                                style={[
+                                  styles.historyItemPrice,
+                                  { color: colors.warning },
+                                ]}
+                              >
+                                Not found
+                              </ThemedText>
+                            ) : null}
                           </View>
                         </View>
                       </View>
@@ -547,6 +700,7 @@ export default function BarcodeScannerScreen() {
           setPriceModalVisible(false);
           setTempBarcode(null);
           setPrice("");
+          setErrorMessage(null);
         }}
       >
         <View style={styles.modalOverlay}>
@@ -567,6 +721,7 @@ export default function BarcodeScannerScreen() {
                   setPriceModalVisible(false);
                   setTempBarcode(null);
                   setPrice("");
+                  setErrorMessage(null);
                 }}
               >
                 <IconSymbol name="xmark" size={16} color={colors.icon} />
@@ -606,23 +761,50 @@ export default function BarcodeScannerScreen() {
               />
             </View>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
+            {errorMessage && (
+              <View
                 style={[
-                  styles.modalButton,
-                  { backgroundColor: colors.secondary },
+                  styles.errorContainer,
+                  { backgroundColor: `${colors.error}20` },
                 ]}
-                onPress={handleAddBarcodeWithPrice}
               >
                 <IconSymbol
-                  name="checkmark.circle.fill"
-                  size={18}
-                  color={colors.buttonText}
+                  name="exclamationmark.triangle.fill"
+                  size={16}
+                  color={colors.error}
                 />
-                <ThemedText style={styles.modalButtonText}>
-                  Add Barcode
+                <ThemedText style={[styles.errorText, { color: colors.error }]}>
+                  {errorMessage}
                 </ThemedText>
-              </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.modalActions}>
+              {isLoading ? (
+                <View style={styles.loadingButton}>
+                  <ActivityIndicator size="small" color={colors.buttonText} />
+                  <ThemedText style={styles.modalButtonText}>
+                    Saving...
+                  </ThemedText>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    { backgroundColor: colors.secondary },
+                  ]}
+                  onPress={handleAddBarcodeWithPrice}
+                >
+                  <IconSymbol
+                    name="checkmark.circle.fill"
+                    size={18}
+                    color={colors.buttonText}
+                  />
+                  <ThemedText style={styles.modalButtonText}>
+                    Add Barcode
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -950,5 +1132,35 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
     marginLeft: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  errorText: {
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  loadingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: "#CCCCCC",
   },
 });
