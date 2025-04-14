@@ -10,8 +10,8 @@ import {
   StatusBar,
   Clipboard,
   Platform,
-  Modal,
   Pressable,
+  Alert,
 } from "react-native";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { ThemedText } from "@/components/ThemedText";
@@ -38,21 +38,13 @@ export default function BarcodeScannerScreen() {
     }[]
   >([]);
   const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [flashOn, setFlashOn] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [scannerVisible, setScannerVisible] = useState(false);
 
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
 
   const copyTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  // Effect to handle automatic scanner toggle based on scan state
-  useEffect(() => {
-    if (scannedData) {
-      // Auto close scanner when we have data
-      setCameraEnabled(false);
-    }
-  }, [scannedData]);
 
   // Copy feedback timer clear
   useEffect(() => {
@@ -72,16 +64,14 @@ export default function BarcodeScannerScreen() {
 
     setScannedData(newScan);
     setScanHistory((prev) => [newScan, ...prev.slice(0, 9)]); // Keep last 10 scans
-    setScannerVisible(false);
   };
 
   const toggleCamera = () => {
-    if (!cameraEnabled) {
-      setScannerVisible(true);
-    } else {
-      setScannerVisible(false);
-    }
     setCameraEnabled(!cameraEnabled);
+  };
+
+  const toggleFlash = () => {
+    setFlashOn(!flashOn);
   };
 
   const copyToClipboard = (text: string) => {
@@ -99,14 +89,30 @@ export default function BarcodeScannerScreen() {
 
   const clearCurrentScan = () => {
     setScannedData(null);
-    setCameraEnabled(true);
-    setScannerVisible(true);
   };
 
   const selectHistoryItem = (item: (typeof scanHistory)[0]) => {
     setScannedData(item);
-    setCameraEnabled(false);
-    setScannerVisible(false);
+  };
+
+  const clearHistory = () => {
+    if (scanHistory.length > 0) {
+      Alert.alert(
+        "Clear History",
+        "Are you sure you want to clear all scan history?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Clear",
+            style: "destructive",
+            onPress: () => setScanHistory([]),
+          },
+        ]
+      );
+    }
   };
 
   // Format timestamp
@@ -138,7 +144,7 @@ export default function BarcodeScannerScreen() {
       >
         {/* Main Container */}
         <ThemedView style={styles.container}>
-          {/* Header with app title and scan button */}
+          {/* Header with app title and action buttons */}
           <ThemedView
             style={[styles.header, { borderBottomColor: colors.border }]}
           >
@@ -149,30 +155,71 @@ export default function BarcodeScannerScreen() {
               </ThemedText>
             </View>
 
-            <TouchableOpacity
-              style={[
-                styles.scanButton,
-                {
-                  backgroundColor: cameraEnabled
-                    ? colors.error
-                    : colors.primary,
-                },
-              ]}
-              onPress={toggleCamera}
-            >
-              <IconSymbol
-                name={cameraEnabled ? "xmark" : "camera.fill"}
-                size={20}
-                color={colors.buttonText}
-              />
-              <ThemedText style={styles.scanButtonText}>
-                {cameraEnabled ? "Close" : "Scan"}
-              </ThemedText>
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              {cameraEnabled && (
+                <TouchableOpacity
+                  style={[
+                    styles.iconButton,
+                    {
+                      backgroundColor: flashOn ? colors.accent : colors.surface,
+                      marginRight: 8,
+                    },
+                  ]}
+                  onPress={toggleFlash}
+                >
+                  <IconSymbol
+                    name={flashOn ? "bolt.fill" : "bolt.slash"}
+                    size={20}
+                    color={flashOn ? colors.buttonText : colors.icon}
+                  />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.scanButton,
+                  {
+                    backgroundColor: cameraEnabled
+                      ? colors.error
+                      : colors.primary,
+                  },
+                ]}
+                onPress={toggleCamera}
+              >
+                <IconSymbol
+                  name={cameraEnabled ? "xmark" : "camera.fill"}
+                  size={20}
+                  color={colors.buttonText}
+                />
+                <ThemedText style={styles.scanButtonText}>
+                  {cameraEnabled ? "Stop" : "Scan"}
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
           </ThemedView>
 
           {/* Main content area */}
           <ThemedView style={styles.content}>
+            {/* Scanner area (only shown when camera is enabled) */}
+            {cameraEnabled && (
+              <ThemedView
+                style={[
+                  styles.scannerContainer,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <BarcodeScanner
+                  onScan={handleBarCodeScanned}
+                  enabled={cameraEnabled}
+                  flashEnabled={flashOn}
+                  inlineMode={true}
+                />
+              </ThemedView>
+            )}
+
             {/* Current scan result section */}
             <ThemedView
               style={[
@@ -180,6 +227,7 @@ export default function BarcodeScannerScreen() {
                 {
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
+                  flex: cameraEnabled ? 0.4 : 0.5, // Adjust flex based on camera visibility
                 },
               ]}
             >
@@ -267,26 +315,28 @@ export default function BarcodeScannerScreen() {
                 </View>
               ) : (
                 <View style={styles.emptyStateContainer}>
-                  <IconSymbol name="barcode" size={40} color={colors.icon} />
+                  <IconSymbol name="barcode" size={32} color={colors.icon} />
                   <ThemedText style={styles.emptyStateText}>
                     No barcode scanned yet
                   </ThemedText>
-                  <TouchableOpacity
-                    style={[
-                      styles.emptyStateButton,
-                      { backgroundColor: colors.primary },
-                    ]}
-                    onPress={toggleCamera}
-                  >
-                    <IconSymbol
-                      name="camera.fill"
-                      size={16}
-                      color={colors.buttonText}
-                    />
-                    <ThemedText style={styles.actionButtonText}>
-                      Scan a Barcode
-                    </ThemedText>
-                  </TouchableOpacity>
+                  {!cameraEnabled && (
+                    <TouchableOpacity
+                      style={[
+                        styles.emptyStateButton,
+                        { backgroundColor: colors.primary },
+                      ]}
+                      onPress={toggleCamera}
+                    >
+                      <IconSymbol
+                        name="camera.fill"
+                        size={16}
+                        color={colors.buttonText}
+                      />
+                      <ThemedText style={styles.actionButtonText}>
+                        Start Scanner
+                      </ThemedText>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </ThemedView>
@@ -298,6 +348,7 @@ export default function BarcodeScannerScreen() {
                 {
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
+                  flex: cameraEnabled ? 0.6 : 0.5, // Adjust flex based on camera visibility
                 },
               ]}
             >
@@ -305,6 +356,18 @@ export default function BarcodeScannerScreen() {
                 <ThemedText style={styles.sectionTitle}>
                   Scan History
                 </ThemedText>
+
+                {scanHistory.length > 0 && (
+                  <TouchableOpacity
+                    style={[
+                      styles.iconButton,
+                      { backgroundColor: colors.background },
+                    ]}
+                    onPress={clearHistory}
+                  >
+                    <IconSymbol name="trash" size={16} color={colors.error} />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {scanHistory.length > 0 ? (
@@ -359,6 +422,7 @@ export default function BarcodeScannerScreen() {
                 </ScrollView>
               ) : (
                 <View style={styles.emptyHistoryContainer}>
+                  <IconSymbol name="doc.text" size={28} color={colors.icon} />
                   <ThemedText style={styles.emptyHistoryText}>
                     No scan history yet
                   </ThemedText>
@@ -366,40 +430,6 @@ export default function BarcodeScannerScreen() {
               )}
             </ThemedView>
           </ThemedView>
-
-          {/* Scanner Modal */}
-          <Modal
-            visible={scannerVisible}
-            animationType="slide"
-            onRequestClose={() => {
-              setScannerVisible(false);
-              setCameraEnabled(false);
-            }}
-            statusBarTranslucent={true}
-          >
-            <View style={styles.scannerModal}>
-              <View style={styles.scannerContainer}>
-                <BarcodeScanner
-                  onScan={handleBarCodeScanned}
-                  enabled={cameraEnabled}
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.closeScannerButton,
-                  {
-                    backgroundColor: colors.error,
-                    top:
-                      Platform.OS === "android" ? STATUS_BAR_HEIGHT + 20 : 50,
-                  },
-                ]}
-                onPress={toggleCamera}
-              >
-                <IconSymbol name="xmark" size={20} color={colors.buttonText} />
-              </TouchableOpacity>
-            </View>
-          </Modal>
         </ThemedView>
       </SafeAreaView>
     </>
@@ -436,6 +466,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: 2,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   scanButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -450,18 +484,29 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   content: {
     flex: 1,
     padding: 16,
     gap: 16,
   },
+  scannerContainer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+    height: 200,
+  },
   currentScanContainer: {
     borderRadius: 12,
     borderWidth: 1,
     overflow: "hidden",
-    flex: 1,
-    minHeight: 200,
-    maxHeight: "45%",
+    minHeight: 180,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -475,13 +520,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
-  },
-  iconButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
   },
   scanDataContainer: {
     flex: 1,
@@ -568,7 +606,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     overflow: "hidden",
-    flex: 1,
   },
   historyList: {
     flex: 1,
@@ -609,22 +646,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
     textAlign: "center",
-  },
-  scannerModal: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  scannerContainer: {
-    flex: 1,
-  },
-  closeScannerButton: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 50 : 30,
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

@@ -8,21 +8,34 @@ import { OpaqueColorValue, StyleProp, ViewStyle } from "react-native";
 import { TextStyle } from "react-native";
 
 // Add your SFSymbol to MaterialIcons mappings here.
-const MAPPING = {
+const MAPPING: Record<
+  string,
+  React.ComponentProps<typeof MaterialIcons>["name"]
+> = {
   // See MaterialIcons here: https://icons.expo.fyi
   // See SF Symbols in the SF Symbols app on Mac.
   "house.fill": "home",
   "paperplane.fill": "send",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
-} as Partial<
-  Record<
-    import("expo-symbols").SymbolViewProps["name"],
-    React.ComponentProps<typeof MaterialIcons>["name"]
-  >
->;
+  "star.slash.fill": "flash-off",
+  "camera.fill": "camera",
+  "bolt.fill": "flash-on",
+  "bolt.slash": "flash-off",
+  xmark: "close",
+  "doc.text": "description",
+  gear: "settings",
+  "info.circle": "info",
+  "arrow.counterclockwise": "refresh",
+  qrcode: "qr-code-scanner",
+  "checkmark.circle.fill": "check-circle",
+  "exclamationmark.triangle.fill": "warning",
+  "photo.on.rectangle": "photo-library",
+  trash: "delete",
+};
 
-export type IconSymbolName = keyof typeof MAPPING;
+// For TypeScript, we're relaxing the type to accept any string
+export type IconSymbolName = string;
 
 /**
  * An icon component that uses native SFSymbols on iOS, and MaterialIcons on Android and web. This ensures a consistent look across platforms, and optimal resource usage.
@@ -34,6 +47,7 @@ export function IconSymbol({
   size = 24,
   color,
   style,
+  weight,
 }: {
   name: IconSymbolName;
   size?: number;
@@ -41,6 +55,21 @@ export function IconSymbol({
   style?: StyleProp<ViewStyle>;
   weight?: SymbolWeight;
 }) {
+  // Add error handling for missing icon mappings
+  if (!MAPPING[name]) {
+    console.warn(
+      `Icon mapping not found for: ${name}. Using 'help' icon as fallback.`
+    );
+    return (
+      <MaterialIcons
+        color={color}
+        size={size}
+        name="help"
+        style={style as StyleProp<TextStyle>}
+      />
+    );
+  }
+
   return (
     <MaterialIcons
       color={color}

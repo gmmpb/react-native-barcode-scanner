@@ -23,13 +23,16 @@ const STATUS_BAR_HEIGHT =
 export function BarcodeScanner({
   onScan,
   enabled = true,
+  flashEnabled = false,
+  inlineMode = false,
 }: {
   onScan: (data: string, type: string) => void;
   enabled?: boolean;
+  flashEnabled?: boolean;
+  inlineMode?: boolean;
 }) {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
-  const [flashOn, setFlashOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
 
   const colorScheme = useColorScheme() ?? "dark";
@@ -117,11 +120,14 @@ export function BarcodeScanner({
     if (!scanned) {
       setScanned(true);
       onScan(data, type);
-    }
-  };
 
-  const toggleFlash = () => {
-    setFlashOn(!flashOn);
+      // Auto-reset scanner in inline mode after a short delay
+      if (inlineMode) {
+        setTimeout(() => {
+          setScanned(false);
+        }, 1500);
+      }
+    }
   };
 
   const resetScanner = () => {
@@ -202,18 +208,21 @@ export function BarcodeScanner({
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="#000000"
-        translucent={Platform.OS === "android"}
-      />
+    <View style={[styles.container, inlineMode && styles.inlineContainer]}>
+      {!inlineMode && (
+        <>
+          <StatusBar
+            barStyle="light-content"
+            backgroundColor="#000000"
+            translucent={Platform.OS === "android"}
+          />
 
-      {/* Add padding for Android status bar in scanner */}
-      {Platform.OS === "android" && (
-        <View
-          style={{ height: STATUS_BAR_HEIGHT, backgroundColor: "#000000" }}
-        />
+          {Platform.OS === "android" && (
+            <View
+              style={{ height: STATUS_BAR_HEIGHT, backgroundColor: "#000000" }}
+            />
+          )}
+        </>
       )}
 
       <CameraView
@@ -222,34 +231,21 @@ export function BarcodeScanner({
         barcodeScannerSettings={{
           barcodeTypes: ["qr", "code39", "code128", "ean13", "ean8", "upc_e"],
         }}
-        enableTorch={flashOn}
+        enableTorch={flashEnabled}
       >
-        <View style={styles.overlay}>
-          <View style={styles.scannerHeader}>
-            <ThemedText style={styles.scannerTitle}>Scan Barcode</ThemedText>
+        <View style={[styles.overlay, inlineMode && styles.inlineOverlay]}>
+          {!inlineMode && (
+            <View style={styles.scannerHeader}>
+              <ThemedText style={styles.scannerTitle}>Scan Barcode</ThemedText>
+            </View>
+          )}
 
-            {torchAvailable && (
-              <TouchableOpacity
-                style={[
-                  styles.flashButton,
-                  {
-                    backgroundColor: flashOn
-                      ? colors.accent
-                      : "rgba(0,0,0,0.5)",
-                  },
-                ]}
-                onPress={toggleFlash}
-              >
-                <IconSymbol
-                  name={flashOn ? "bolt.fill" : "bolt.slash"}
-                  size={20}
-                  color={flashOn ? colors.buttonText : "#FFFFFF"}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.scanFrameContainer}>
+          <View
+            style={[
+              styles.scanFrameContainer,
+              inlineMode && styles.inlineScanFrameContainer,
+            ]}
+          >
             {/* Pulse effect behind scan frame */}
             <Animated.View
               style={[
@@ -259,11 +255,21 @@ export function BarcodeScanner({
                   transform: [{ scale: pulseScale }],
                   opacity: pulseOpacity,
                 },
+                inlineMode && {
+                  width: INLINE_SCAN_FRAME_SIZE + 20,
+                  height: INLINE_SCAN_FRAME_SIZE + 20,
+                },
               ]}
             />
 
             {/* Main scan frame */}
-            <View style={[styles.scanFrame, { borderColor: colors.primary }]}>
+            <View
+              style={[
+                styles.scanFrame,
+                { borderColor: colors.primary },
+                inlineMode && styles.inlineScanFrame,
+              ]}
+            >
               {/* Corner effects for the scan frame */}
               <View
                 style={[styles.cornerTL, { borderColor: colors.primary }]}
@@ -285,7 +291,19 @@ export function BarcodeScanner({
                     styles.scanLine,
                     {
                       backgroundColor: colors.primary,
-                      transform: [{ translateY: scanLineTranslate }],
+                      transform: [
+                        {
+                          translateY: inlineMode
+                            ? scanAnimatedValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [-5, INLINE_SCAN_FRAME_SIZE - 5],
+                              })
+                            : scanLineTranslate,
+                        },
+                      ],
+                      width: inlineMode
+                        ? INLINE_SCAN_FRAME_SIZE - 10
+                        : SCAN_FRAME_SIZE - 10,
                     },
                   ]}
                 />
@@ -293,29 +311,33 @@ export function BarcodeScanner({
             </View>
           </View>
 
-          <View style={styles.scannerGuide}>
-            <ThemedText style={styles.scannerGuideText}>
-              Position barcode inside the frame
-            </ThemedText>
-          </View>
+          {!inlineMode && (
+            <>
+              <View style={styles.scannerGuide}>
+                <ThemedText style={styles.scannerGuideText}>
+                  Position barcode inside the frame
+                </ThemedText>
+              </View>
 
-          {scanned && (
-            <TouchableOpacity
-              style={[
-                styles.scanAgainButton,
-                { backgroundColor: colors.primary },
-              ]}
-              onPress={resetScanner}
-            >
-              <IconSymbol
-                name="arrow.counterclockwise"
-                size={18}
-                color="#FFFFFF"
-              />
-              <ThemedText style={styles.scanAgainButtonText}>
-                Scan Again
-              </ThemedText>
-            </TouchableOpacity>
+              {scanned && (
+                <TouchableOpacity
+                  style={[
+                    styles.scanAgainButton,
+                    { backgroundColor: colors.primary },
+                  ]}
+                  onPress={resetScanner}
+                >
+                  <IconSymbol
+                    name="arrow.counterclockwise"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <ThemedText style={styles.scanAgainButtonText}>
+                    Scan Again
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
       </CameraView>
@@ -325,11 +347,16 @@ export function BarcodeScanner({
 
 const { width, height } = Dimensions.get("window");
 const SCAN_FRAME_SIZE = Math.min(width * 0.7, 250);
+const INLINE_SCAN_FRAME_SIZE = Math.min(width * 0.5, 160);
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000000",
+  },
+  inlineContainer: {
+    backgroundColor: "transparent",
+    height: "100%",
   },
   disabledContainer: {
     flex: 1,
@@ -401,6 +428,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: 40,
   },
+  inlineOverlay: {
+    justifyContent: "center",
+    paddingBottom: 0,
+  },
   scannerHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -414,17 +445,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
   },
-  flashButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   scanFrameContainer: {
     alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
+  },
+  inlineScanFrameContainer: {
+    // For the inline scanner
   },
   pulseEffect: {
     position: "absolute",
@@ -441,6 +468,11 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     overflow: "hidden",
     position: "relative",
+  },
+  inlineScanFrame: {
+    width: INLINE_SCAN_FRAME_SIZE,
+    height: INLINE_SCAN_FRAME_SIZE,
+    borderRadius: 8,
   },
   scanLine: {
     width: SCAN_FRAME_SIZE - 10,
